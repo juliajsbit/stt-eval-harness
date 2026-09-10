@@ -1,0 +1,22 @@
+{
+  "n": 8,
+  "overall_wer": 0.1786,
+  "overall_wer_ci95": [
+    0.0,
+    0.3864
+  ],
+  "overall_cer": 0.1888,
+  "wer_by_slice": {
+    "accent": 0.0,
+    "clean": 0.1667,
+    "noisy": 0.0,
+    "numbers": 0.7143
+  },
+  "errors": {
+    "S": 3,
+    "I": 0,
+    "D": 12,
+    "N": 84
+  },
+  "runaways": []
+}

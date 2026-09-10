@@ -1,0 +1,4 @@
+jiwer==4.0.0
+faster-whisper==1.2.1
+# optional, for the Deepgram backend in eval/transcribe.py:
+# deepgram-sdk==3.7.0

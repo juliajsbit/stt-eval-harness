@@ -1,0 +1,27 @@
+name: STT Eval Gate
+
+# Runs the eval and blocks the change if speech-to-text quality regresses.
+# Scoring runs from the cached predictions in results/, so CI needs no model,
+# no GPU and no API key. Regenerate predictions locally with eval/transcribe.py
+# and commit them when the model or config changes.
+
+on:
+  push:
+    paths: ["eval/**", "data/**", "results/preds_*.json"]
+  pull_request:
+    paths: ["eval/**", "data/**", "results/preds_*.json"]
+  workflow_dispatch:
+
+jobs:
+  eval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install jiwer==4.0.0
+      - name: Score cached predictions
+        run: python eval/run_eval.py --preds results/preds_faster-whisper.json
+      - name: Regression gate
+        run: python eval/gate.py
