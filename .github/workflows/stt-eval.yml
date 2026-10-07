@@ -7,9 +7,9 @@ name: STT Eval Gate
 
 on:
   push:
-    paths: ["eval/**", "data/**", "results/preds_*.json"]
+    paths: ["eval/**", "tests/**", "data/**", "results/preds_*.json"]
   pull_request:
-    paths: ["eval/**", "data/**", "results/preds_*.json"]
+    paths: ["eval/**", "tests/**", "data/**", "results/preds_*.json"]
   workflow_dispatch:
 
 jobs:
@@ -20,7 +20,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install jiwer==4.0.0
+      - run: pip install jiwer==4.0.0 pytest==9.1.1
+      - name: Test the harness itself
+        run: python -m pytest tests/ -q
       - name: Score cached predictions
         run: python eval/run_eval.py --preds results/preds_faster-whisper.json
       - name: Regression gate

@@ -1,5 +1,5 @@
 {
-  "description": "Golden evaluation set for a speech-to-text (STT) harness. Each entry pairs an audio clip with its reference (ground-truth) transcript and a slice tag. Slices let us see WER (Word Error Rate) per condition, not just one average number - regressions usually show up in one slice first.",
+  "description": "Golden evaluation set for a speech-to-text (STT) harness. Each entry pairs an audio clip with its reference (ground-truth) transcript and a slice tag. Slices let us see WER (Word Error Rate) per condition, not just one average number - regressions usually show up in one slice first. An empty reference marks a silence clip: there is nothing to transcribe, so it is scored by its own hallucination check instead of WER.",
   "entries": [
     {"id": "clean-001", "audio": "audio/clean-001.wav", "slice": "clean", "reference": "the quarterly revenue grew by twelve percent year over year"},
     {"id": "clean-002", "audio": "audio/clean-002.wav", "slice": "clean", "reference": "please transfer the balance to the savings account tomorrow morning"},
@@ -8,6 +8,7 @@
     {"id": "noisy-002", "audio": "audio/noisy-002.wav", "slice": "noisy", "reference": "the shipment will arrive at the warehouse by friday evening"},
     {"id": "accent-001", "audio": "audio/accent-001.wav", "slice": "accent", "reference": "i would like to schedule an appointment with the cardiologist"},
     {"id": "accent-002", "audio": "audio/accent-002.wav", "slice": "accent", "reference": "the patient reported mild symptoms over the last three days"},
-    {"id": "numbers-001", "audio": "audio/numbers-001.wav", "slice": "numbers", "reference": "call me back at four one five five five five one two three four"}
+    {"id": "numbers-001", "audio": "audio/numbers-001.wav", "slice": "numbers", "reference": "call me back at four one five five five five one two three four"},
+    {"id": "silence-001", "audio": "audio/silence-001.wav", "slice": "silence", "reference": ""}
   ]
 }

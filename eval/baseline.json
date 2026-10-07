@@ -5,7 +5,7 @@
     0.0,
     0.3864
   ],
-  "overall_cer": 0.1888,
+  "overall_cer": 0.1608,
   "wer_by_slice": {
     "accent": 0.0,
     "clean": 0.1667,
@@ -18,5 +18,12 @@
     "D": 12,
     "N": 84
   },
-  "runaways": []
+  "runaways": [],
+  "silence": {
+    "n": 1,
+    "hallucinated": [
+      "silence-001"
+    ],
+    "emitted_words": 1
+  }
 }

@@ -11,6 +11,8 @@ The gate is built to separate a real regression from run-to-run noise:
   - Absolute ceiling. WER above a hard ceiling fails regardless of baseline.
   - Per-slice check. A real regression usually shows up in one slice first
     (e.g. noisy audio), so each slice is gated too, not just the average.
+  - Silence check. Words invented over silence never move WER, so they are
+    gated on their own count. More hallucinated clips than the baseline fails.
 
 Exit codes: 0 = pass, 2 = regression, 1 = usage/harness error.
 """
@@ -66,6 +68,12 @@ def main():
         if d > POLICY["slice_max_increase"]:
             failures.append(f"slice '{s}' WER rose {d:+.3f} "
                             f"(> {POLICY['slice_max_increase']:.2f}) [{base_v:.3f} -> {cur_v:.3f}]")
+
+    cur_sil = len(cur.get("silence", {}).get("hallucinated", []))
+    base_sil = len(base.get("silence", {}).get("hallucinated", []))
+    if cur_sil > base_sil:
+        failures.append(f"hallucinated on {cur_sil} silence clip(s), baseline had {base_sil} "
+                        f"- invented words over silence never show up in WER")
 
     if failures:
         print("[gate] REGRESSION - build blocked:")

@@ -21,6 +21,9 @@ audio (LibriSpeech, Common Voice) or the Deepgram API and nothing else changes.
   which is how STT models invent words or loop.
 - **Bootstrap 95% confidence interval on WER** - the noise band. If a new WER lands
   inside the baseline's interval, it is noise, not a regression.
+- **Hallucination on silence** - clips with no speech in them. WER cannot score
+  these (an empty reference has no words to divide by), so they are held out of the
+  rate and counted separately.
 
 ## Quickstart
 
@@ -31,6 +34,8 @@ python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
 ./venv/bin/python eval/transcribe.py --backend faster-whisper --model tiny.en
 ./venv/bin/python eval/run_eval.py --preds results/preds_faster-whisper.json
 ./venv/bin/python eval/gate.py                                        # 0 pass, 2 regression
+
+./venv/bin/python -m pytest tests/ -q                                 # test the harness itself
 ```
 
 Run the exact model a customer would, with the Deepgram API:
@@ -55,15 +60,27 @@ DEEPGRAM_API_KEY=... ./venv/bin/python eval/transcribe.py --backend deepgram --m
 - **Normalization** is applied identically to reference and hypothesis before
   scoring, so casing and punctuation do not inflate the error rate.
 
-## A real finding from the harness
+## Findings from the harness
 
-On the generated set, the `numbers` slice scored WER 0.71 while clean/noisy/accent
-were near zero. The model transcribed "four one five ..." as "415-...", and "twelve
-percent" as "12%". The errors are formatting, not hearing. This is the classic STT
-eval trap: without **inverse text normalization** (numbers, dates, currency) WER is
-dominated by formatting, not accuracy. The slice made it obvious in one number - an
-average alone would have hidden it. Next step is a normalization pass before scoring
-and a separate "formatting" metric.
+**1. The `numbers` slice fails on formatting, not hearing.** It scored WER 0.71 while
+clean/noisy/accent were near zero. The model transcribed "four one five ..." as
+"415-...", and "twelve percent" as "12%". This is the classic STT eval trap: without
+**inverse text normalization** (numbers, dates, currency) WER is dominated by
+formatting rather than accuracy. The slice made it obvious in one number - an average
+alone would have hidden it. Next step is a normalization pass before scoring and a
+separate "formatting" metric.
+
+**2. The model invents words over silence, and WER cannot see it.** On three seconds
+of digital silence, `tiny.en` returns "You". Scoring the corpus with and without that
+hallucination gives the *identical* overall WER of 0.179 - an empty reference has no
+words to divide by, so the invented word has nothing to inflate. This is why silence
+clips are pulled out of the rate and gated on their own count instead.
+
+That second one is an **open finding**, not a fixed bug: the baseline records the
+hallucination as today's reality so the gate stays usable, and the gate blocks any
+change that hallucinates on *more* clips. To watch it fire, set
+`silence.hallucinated` to `[]` in `eval/baseline.json` and run `eval/gate.py` - it
+exits 2 while overall WER never moves.
 
 ## Applying this to production
 
@@ -84,5 +101,15 @@ eval/transcribe.py       STT backends (faster-whisper, deepgram) -> predictions 
 eval/run_eval.py         WER / CER / slices / bootstrap CI / runaway -> scores + report
 eval/gate.py             noise-aware regression gate (CI/CD), exit 2 on regression
 eval/baseline.json       committed known-good scores
+tests/                   pytest suite over the scoring math and the gate's exit codes
 results/                 scores.json + report.md
 ```
+
+## Testing the harness
+
+The harness is a measuring instrument, so its own math is tested: that WER is
+aggregated corpus-wide rather than averaged per clip, that an empty hypothesis counts
+as total failure instead of a pass, that the noise band is deterministic, and that the
+gate returns 2 on a real regression, 0 on a wobble inside the band, and 1 - not 0 -
+when the baseline is missing. A gate that silently passes when it cannot judge is
+worse than no gate.
