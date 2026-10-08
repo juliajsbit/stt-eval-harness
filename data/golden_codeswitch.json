@@ -1,0 +1,17 @@
+{
+  "description": "Code-switching set: one speaker mixing languages inside one sentence, recorded in a real voice (not synthesized). Slices name the language pair, base language first: ru-en is Russian with English words dropped in, en-ru is the reverse, uk-en is Ukrainian with English. References are written the way the words were spoken: English words in Latin, Russian and Ukrainian in Cyrillic.",
+  "entries": [
+    {"id": "cs-001", "audio": "audio/codeswitch/cs-001.m4a", "slice": "ru-en", "reference": "давай сначала сделаем deploy а потом проверим logs"},
+    {"id": "cs-002", "audio": "audio/codeswitch/cs-002.m4a", "slice": "ru-en", "reference": "у меня завтра interview в десять утра по pacific time"},
+    {"id": "cs-003", "audio": "audio/codeswitch/cs-003.m4a", "slice": "ru-en", "reference": "я запушила fix в main branch но pipeline опять упал"},
+    {"id": "cs-004", "audio": "audio/codeswitch/cs-004.m4a", "slice": "ru-en", "reference": "закинь мне link на meeting в slack"},
+    {"id": "cs-005", "audio": "audio/codeswitch/cs-005.m4a", "slice": "ru-en", "reference": "этот feature нужен клиенту до конца sprint"},
+    {"id": "cs-006", "audio": "audio/codeswitch/cs-006.m4a", "slice": "ru-en", "reference": "мы сделали review и нашли bug в authentication"},
+    {"id": "cs-007", "audio": "audio/codeswitch/cs-007.m4a", "slice": "en-ru", "reference": "i told my mom we would come for ужин on sunday"},
+    {"id": "cs-008", "audio": "audio/codeswitch/cs-008.m4a", "slice": "en-ru", "reference": "the recruiter asked about my salary и я не знала что сказать"},
+    {"id": "cs-009", "audio": "audio/codeswitch/cs-009.m4a", "slice": "en-ru", "reference": "can you pick up хлеб and молоко on the way home"},
+    {"id": "cs-010", "audio": "audio/codeswitch/cs-010.m4a", "slice": "uk-en", "reference": "я вже відправила resume але recruiter ще не відповів"},
+    {"id": "cs-011", "audio": "audio/codeswitch/cs-011.m4a", "slice": "uk-en", "reference": "треба оновити dashboard перед demo"},
+    {"id": "cs-012", "audio": "audio/codeswitch/cs-012.m4a", "slice": "uk-en", "reference": "ми запустили evaluation і модель знову помилилась"}
+  ]
+}

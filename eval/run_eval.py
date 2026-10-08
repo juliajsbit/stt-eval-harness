@@ -27,6 +27,11 @@ Design notes (why it is built this way):
     you can re-score instantly without re-running the model. Reproducible and cheap.
   * Everything is normalized the same way on both sides before scoring, so casing
     and punctuation do not inflate the error rate.
+  * Code-switching (one speaker mixing languages in one sentence) gets two extra
+    views. WER by script splits the errors between Latin and Cyrillic reference
+    words, so you can see which side of the switch breaks. The collapse flag
+    marks a mixed clip whose transcript came back in one script only - the model
+    translated or transliterated half of the speech instead of writing it down.
 """
 from __future__ import annotations
 import argparse, json, random
@@ -37,8 +42,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Text normalization applied identically to reference and hypothesis before
 # scoring. Real STT eval always normalizes first (lowercase, drop punctuation).
+# Russian "ё" is folded into "е": most writers and models drop the dots, and
+# that is spelling, not hearing.
 _WORDS = jiwer.Compose([
     jiwer.ToLowerCase(),
+    jiwer.SubstituteRegexes({"ё": "е"}),
     jiwer.RemovePunctuation(),
     jiwer.RemoveMultipleSpaces(),
     jiwer.Strip(),
@@ -47,6 +55,7 @@ _WORDS = jiwer.Compose([
 
 _CHARS = jiwer.Compose([
     jiwer.ToLowerCase(),
+    jiwer.SubstituteRegexes({"ё": "е"}),
     jiwer.RemovePunctuation(),
     jiwer.RemoveMultipleSpaces(),
     jiwer.Strip(),
@@ -74,14 +83,70 @@ def per_item_counts(reference: str, hypothesis: str) -> dict:
     """
     chars = _char_counts(reference, hypothesis)
     if not hypothesis:
-        n = len(reference.split())
-        return {"S": 0, "I": 0, "D": n, "N": n, "errors": n, **chars}
+        ref_words = _WORDS(reference)[0]
+        n = len(ref_words)
+        by_script = {}
+        for w in ref_words:
+            s = by_script.setdefault(script_of(w), {"errors": 0, "N": 0})
+            s["errors"] += 1
+            s["N"] += 1
+        return {"S": 0, "I": 0, "D": n, "N": n, "errors": n, **chars, "by_script": by_script}
     out = jiwer.process_words(reference, hypothesis,
                               reference_transform=_WORDS, hypothesis_transform=_WORDS)
     N = out.substitutions + out.deletions + out.hits  # reference-word count
     errors = out.substitutions + out.insertions + out.deletions
     return {"S": out.substitutions, "I": out.insertions, "D": out.deletions,
-            "N": N, "errors": errors, **chars}
+            "N": N, "errors": errors, **chars, "by_script": _script_counts(out)}
+
+
+def script_of(word: str) -> str:
+    """Which writing system a word is in: 'cyrillic', 'latin' or 'other'."""
+    if any("Ѐ" <= ch <= "ӿ" for ch in word):
+        return "cyrillic"
+    if any(ch.isascii() and ch.isalpha() for ch in word):
+        return "latin"
+    return "other"
+
+
+def _script_counts(out) -> dict:
+    """Attribute each word error to the script of the word it hit.
+
+    Substitutions and deletions belong to the reference word that was missed.
+    Insertions have no reference word, so they go to the script of the inserted
+    word - a model that adds an English translation shows up on the Latin side.
+    """
+    ref, hyp = out.references[0], out.hypotheses[0]
+    by_script = {}
+
+    def bucket(word):
+        return by_script.setdefault(script_of(word), {"errors": 0, "N": 0})
+
+    for chunk in out.alignments[0]:
+        if chunk.type == "insert":
+            for w in hyp[chunk.hyp_start_idx:chunk.hyp_end_idx]:
+                bucket(w)["errors"] += 1
+            continue
+        for w in ref[chunk.ref_start_idx:chunk.ref_end_idx]:
+            b = bucket(w)
+            b["N"] += 1
+            if chunk.type != "equal":
+                b["errors"] += 1
+    return by_script
+
+
+def collapsed_to(reference: str, hypothesis: str) -> str | None:
+    """The code-switching failure: mixed speech in, one language out.
+
+    If the reference mixes Latin and Cyrillic words but the hypothesis is in a
+    single script, the model translated or transliterated part of what was said.
+    Returns the script that survived, or None if nothing collapsed.
+    """
+    mixed = {"latin", "cyrillic"}
+    ref_scripts = {script_of(w) for w in _WORDS(reference)[0]} & mixed
+    if ref_scripts != mixed or not hypothesis.strip():
+        return None
+    hyp_scripts = {script_of(w) for w in _WORDS(hypothesis)[0]} & mixed
+    return hyp_scripts.pop() if len(hyp_scripts) == 1 else None
 
 
 def _char_counts(reference: str, hypothesis: str) -> dict:
@@ -99,6 +164,17 @@ def corpus_wer(items: list[dict]) -> float:
     tot_err = sum(i["errors"] for i in items)
     tot_n = sum(i["N"] for i in items)
     return round(tot_err / tot_n, 4) if tot_n else 0.0
+
+
+def wer_by_script(items: list[dict]) -> dict:
+    """Corpus WER per script, aggregated the same way as the overall rate."""
+    totals = {}
+    for i in items:
+        for s, c in i.get("by_script", {}).items():
+            t = totals.setdefault(s, {"errors": 0, "N": 0})
+            t["errors"] += c["errors"]
+            t["N"] += c["N"]
+    return {s: corpus_wer([t]) for s, t in sorted(totals.items()) if t["N"]}
 
 
 def corpus_cer(items: list[dict]) -> float:
@@ -154,7 +230,8 @@ def score(golden: dict, preds: dict) -> tuple[list, dict]:
         wer = round(c["errors"] / c["N"], 4) if c["N"] else 0.0
         cer = round(c["char_errors"] / c["char_N"], 4) if c["char_N"] else 0.0
         rows.append({"id": e["id"], "slice": e["slice"], "wer": wer, "cer": cer,
-                     "runaway": runaway_flag(ref, hyp), **c,
+                     "runaway": runaway_flag(ref, hyp),
+                     "collapsed_to": collapsed_to(ref, hyp), **c,
                      "reference": ref, "hypothesis": hyp})
 
     by_slice = {}
@@ -172,6 +249,8 @@ def score(golden: dict, preds: dict) -> tuple[list, dict]:
                    "D": sum(r["D"] for r in rows), "N": sum(r["N"] for r in rows)},
         "runaways": [r["id"] for r in rows if r["runaway"]],
         "silence": silence_report(silence_rows),
+        "wer_by_script": wer_by_script(rows),
+        "collapsed": {r["id"]: r["collapsed_to"] for r in rows if r["collapsed_to"]},
     }
     return rows, agg
 
@@ -195,6 +274,15 @@ def write_report(rows, agg, out: Path):
     L += ["", "## WER by slice", "", "| Slice | WER |", "| --- | --- |"]
     for s, v in agg["wer_by_slice"].items():
         L.append(f"| {s} | {v:.3f} |")
+
+    # Only a corpus with more than one script has a code-switching story to tell.
+    if len(agg["wer_by_script"]) > 1:
+        L += ["", "## Code-switching", "", "| Script | WER |", "| --- | --- |"]
+        for s, v in agg["wer_by_script"].items():
+            L.append(f"| {s} | {v:.3f} |")
+        L += ["", f"Mixed clips collapsed to one script: **{len(agg['collapsed'])}**"]
+        for cid, s in agg["collapsed"].items():
+            L.append(f"- {cid}: came back in {s} only")
     L += ["", "## Per-clip", "", "| ID | Slice | WER | CER | S/I/D | Runaway |",
           "| --- | --- | --- | --- | --- | --- |"]
     for r in rows:
@@ -213,7 +301,7 @@ def main():
     golden, preds = load_json(args.golden), load_json(args.preds)
     rows, agg = score(golden, preds)
 
-    outdir = Path(args.out); outdir.mkdir(exist_ok=True)
+    outdir = Path(args.out); outdir.mkdir(parents=True, exist_ok=True)
     (outdir / "scores.json").write_text(json.dumps(agg, indent=2) + "\n")
     write_report(rows, agg, outdir / "report.md")
 
@@ -226,6 +314,11 @@ def main():
     s = agg["silence"]
     if s["hallucinated"]:
         print(f"  hallucinated on silence: {s['hallucinated']} ({s['emitted_words']} invented words)")
+    if len(agg["wer_by_script"]) > 1:
+        for sc, v in agg["wer_by_script"].items():
+            print(f"  {sc:8s} words WER {v:.3f}")
+        if agg["collapsed"]:
+            print(f"  collapsed to one script: {agg['collapsed']}")
     print(f"Wrote {outdir/'scores.json'} and {outdir/'report.md'}")
 
 

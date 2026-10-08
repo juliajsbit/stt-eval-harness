@@ -82,6 +82,33 @@ change that hallucinates on *more* clips. To watch it fire, set
 `silence.hallucinated` to `[]` in `eval/baseline.json` and run `eval/gate.py` - it
 exits 2 while overall WER never moves.
 
+## Code-switching slice (in progress)
+
+Many people mix languages inside one sentence: "давай сначала сделаем deploy а
+потом проверим logs". STT models often handle this badly, and in ways one WER
+number hides. A model can translate the Russian half into English or write it in
+Latin letters. The overall rate barely moves, because the English half is right.
+
+`data/golden_codeswitch.json` holds 12 such sentences (Russian + English,
+English + Russian, Ukrainian + English), recorded in a real voice rather than
+synthesized. The harness adds two views for them:
+
+- **WER by script** - errors split between Latin and Cyrillic reference words, so
+  you see which side of the switch breaks.
+- **Collapse flag** - a mixed clip whose transcript came back in one script only.
+  In a test, one translated clip moved overall WER to just 0.019, and the flag
+  still caught it.
+
+```bash
+./venv/bin/python eval/transcribe.py --backend faster-whisper --model large-v3 --language auto \
+    --golden data/golden_codeswitch.json --out results/codeswitch/preds_large-v3.json
+./venv/bin/python eval/run_eval.py --golden data/golden_codeswitch.json \
+    --preds results/codeswitch/preds_large-v3.json --out results/codeswitch/large-v3
+./venv/bin/python eval/compare.py results/codeswitch/*/
+```
+
+Recordings and model results are next.
+
 ## Applying this to production
 
 The metrics change per surface but the machine is the same:
@@ -96,9 +123,11 @@ The metrics change per surface but the machine is the same:
 
 ```
 data/golden.json         golden set: audio path + reference transcript + slice
+data/golden_codeswitch.json  mixed-language set, real recorded voice
 eval/make_audio.py       synthesize audio from references (macOS `say`)
-eval/transcribe.py       STT backends (faster-whisper, deepgram) -> predictions cache
-eval/run_eval.py         WER / CER / slices / bootstrap CI / runaway -> scores + report
+eval/transcribe.py       STT backends (faster-whisper, deepgram, openai) -> predictions cache
+eval/run_eval.py         WER / CER / slices / bootstrap CI / runaway / by-script -> scores + report
+eval/compare.py          several scored runs side by side
 eval/gate.py             noise-aware regression gate (CI/CD), exit 2 on regression
 eval/baseline.json       committed known-good scores
 tests/                   pytest suite over the scoring math and the gate's exit codes
